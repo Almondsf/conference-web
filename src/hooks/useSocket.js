@@ -24,7 +24,9 @@ export function useSocket(roomCode, { onMessage, onOpen, onClose } = {}) {
   useEffect(() => {
     if (!roomCode) return;
 
-    const ws = new WebSocket(`ws://localhost:8001/ws/rooms/${roomCode}/`);
+    const ws = new WebSocket(
+      `${import.meta.env.VITE_WS_URL}/ws/rooms/${roomCode}/`
+    );
     socketRef.current = ws;
 
     ws.onopen = () => handlersRef.current.onOpen?.();

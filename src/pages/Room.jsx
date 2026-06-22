@@ -31,6 +31,7 @@ export default function Room() {
   const [isLocked, setIsLocked] = useState(false);
   const [mutedByHost, setMutedByHost] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   const isHost = room?.host_email === user?.email;
   const sendRef = useRef(null);
@@ -71,16 +72,23 @@ export default function Room() {
           wasConnectedRef.current = true;
           sendRef.current?.({ type: "get_participants" });
           break;
-        case "participants_list":
-          setParticipants(data.participants);
-          data.participants
-            .filter((email) => email !== user?.email)
-            .forEach((email) => createPeer(email, true));
-          break;
         case "user_joined":
           setParticipants((prev) =>
             prev.includes(data.user) ? prev : [...prev, data.user]
           );
+          // Only initiate if our email comes first alphabetically
+          const shouldInitiate = user?.email < data.user;
+          createPeer(data.user, shouldInitiate);
+          break;
+
+        case "participants_list":
+          setParticipants(data.participants);
+          data.participants
+            .filter((email) => email !== user?.email)
+            .forEach((email) => {
+              const shouldInitiate = user?.email < email;
+              createPeer(email, shouldInitiate);
+            });
           break;
         case "user_left":
           setParticipants((prev) => prev.filter((p) => p !== data.user));
@@ -105,7 +113,7 @@ export default function Room() {
     [stream]
   );
 
-  const { send } = useSocket(code, {
+  const { send, closeIntentionally } = useSocket(code, {
     onOpen: () => {
       const token = localStorage.getItem("access_token");
       send({ type: "authenticate", token });
@@ -115,6 +123,10 @@ export default function Room() {
       setStatus("error");
       if (wasConnectedRef.current) navigate("/rooms");
     },
+    onReconnecting: (attempt) => {
+      setStatus("reconnecting");
+      setReconnectAttempt(attempt);
+    },
   });
 
   useEffect(() => {
@@ -122,6 +134,7 @@ export default function Room() {
   }, [send]);
 
   const leaveRoom = async () => {
+    closeIntentionally();
     try {
       await api.post(`/rooms/${code}/leave/`);
     } catch {}
@@ -129,6 +142,7 @@ export default function Room() {
   };
 
   const closeRoom = async () => {
+    closeIntentionally();
     try {
       await api.delete(`/rooms/${code}/`);
     } catch {}
@@ -189,6 +203,8 @@ export default function Room() {
             className={`flex items-center gap-1.5 text-xs font-medium ${
               status === "connected"
                 ? "text-green-600"
+                : status === "reconnecting"
+                ? "text-yellow-500"
                 : status === "error"
                 ? "text-red-500"
                 : "text-gray-400"
@@ -198,6 +214,8 @@ export default function Room() {
               className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                 status === "connected"
                   ? "bg-green-500"
+                  : status === "reconnecting"
+                  ? "bg-yellow-400 animate-pulse"
                   : status === "error"
                   ? "bg-red-500"
                   : "bg-gray-300"
@@ -206,6 +224,8 @@ export default function Room() {
             <span className="hidden sm:block">
               {status === "connected"
                 ? "Connected"
+                : status === "reconnecting"
+                ? `Reconnecting… (${reconnectAttempt}/${5})`
                 : status === "error"
                 ? "Disconnected"
                 : "Connecting…"}
@@ -250,8 +270,14 @@ export default function Room() {
         <div className="flex-1 flex flex-col gap-3 p-3 md:p-6">
           {/* Banners */}
           {mediaError && (
-            <div className="bg-red-50 border border-red-200 text-red-600 text-xs md:text-sm px-3 md:px-4 py-2.5 md:py-3 rounded-xl">
-              Camera/mic error: {mediaError}.
+            <div
+              className={`text-xs md:text-sm px-3 md:px-4 py-2.5 md:py-3 rounded-xl border ${
+                mediaError.includes("Audio only")
+                  ? "bg-yellow-50 border-yellow-200 text-yellow-800"
+                  : "bg-red-50 border-red-200 text-red-600"
+              }`}
+            >
+              {mediaError}
             </div>
           )}
           {mutedByHost && (

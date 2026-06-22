@@ -19,18 +19,41 @@ export default function Auth() {
   const update = (e) =>
     setFields((f) => ({ ...f, [e.target.name]: e.target.value }));
 
+  const [slow, setSlow] = useState(false);
+
   const submit = async () => {
     setError("");
     setLoading(true);
+    setSlow(false);
+
+    // If request takes more than 5 seconds, show a message
+    const slowTimer = setTimeout(() => setSlow(true), 5000);
+
     try {
       const endpoint = mode === "login" ? "/auth/login/" : "/auth/register/";
       const { data } = await api.post(endpoint, fields);
       login(data.user, data.tokens);
       navigate("/rooms");
     } catch (err) {
-      setError(err.response?.data?.detail || "Something went wrong.");
+      const data = err.response?.data;
+      if (!data) {
+        setError("Network error. Check your connection.");
+        return;
+      }
+      if (typeof data === "string") {
+        setError(data);
+      } else if (data.detail) {
+        setError(data.detail);
+      } else if (data.non_field_errors) {
+        setError(data.non_field_errors[0]);
+      } else {
+        const first = Object.values(data)[0];
+        setError(Array.isArray(first) ? first[0] : first);
+      }
     } finally {
+      clearTimeout(slowTimer);
       setLoading(false);
+      setSlow(false);
     }
   };
 
@@ -95,6 +118,12 @@ export default function Auth() {
               ? "Sign in"
               : "Create account"}
           </button>
+
+          {slow && (
+            <p className="text-xs text-center text-gray-400 animate-pulse">
+              Server is waking up, this may take a moment…
+            </p>
+          )}
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">

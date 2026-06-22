@@ -9,15 +9,38 @@ export function useMedia() {
   const streamRef = useRef(null);
 
   useEffect(() => {
-    navigator.mediaDevices
-      .getUserMedia({ audio: true, video: true })
-      .then((s) => {
+    const getMedia = async () => {
+      // First try audio + video
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: true,
+        });
         streamRef.current = s;
         setStream(s);
-      })
-      .catch((err) => {
-        setError(err.message);
-      });
+        return;
+      } catch {}
+
+      // Fall back to audio only if camera not available
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+        streamRef.current = s;
+        setStream(s);
+        setVideoEnabled(false);
+        setError("No camera found. Audio only.");
+        return;
+      } catch {}
+
+      // Nothing works
+      setError(
+        "Could not access camera or microphone. Check browser permissions."
+      );
+    };
+
+    getMedia();
 
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());

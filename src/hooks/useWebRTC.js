@@ -29,25 +29,24 @@ export function useWebRTC({ localStream, send, currentUser }) {
   };
 
   const createPeer = (remoteEmail, isInitiator) => {
-    // Don't create duplicate connections
-    if (peersRef.current[remoteEmail]) return peersRef.current[remoteEmail];
+    if (peersRef.current[remoteEmail]) {
+      peersRef.current[remoteEmail].close();
+      delete peersRef.current[remoteEmail];
+    }
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peersRef.current[remoteEmail] = pc;
 
-    // Add local tracks to the connection
     localStream?.getTracks().forEach((track) => {
       pc.addTrack(track, localStream);
     });
 
-    // Send our ICE candidates to the remote peer via signaling
     pc.onicecandidate = ({ candidate }) => {
       if (candidate) {
         send({ type: "ice_candidate", target: remoteEmail, candidate });
       }
     };
 
-    // When remote tracks arrive, store the stream
     pc.ontrack = ({ streams }) => {
       if (streams[0]) addRemoteStream(remoteEmail, streams[0]);
     };
@@ -59,7 +58,6 @@ export function useWebRTC({ localStream, send, currentUser }) {
       }
     };
 
-    // If we're the initiator, create and send an offer
     if (isInitiator) {
       pc.createOffer()
         .then((offer) => pc.setLocalDescription(offer))
